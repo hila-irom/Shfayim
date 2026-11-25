@@ -190,38 +190,48 @@ function pickStop(s,extra){
 }
 $('stopSel').onchange=()=>{const v=$('stopSel').value;if(v==='')return;meetAddr='';pickStop(STOPS[+v]);};
 $('addr').oninput=()=>$('addrErr').classList.add('hide');
-/* address/place search: Tel Aviv area first, several sources */
+/* address/place search: collect all matches in the TA area, let her choose */
 const BOX='34.74,32.13,34.86,32.03';
 const inArea=(la,lo)=>la>31.98&&la<32.16&&lo>34.70&&lo<34.90;
 async function nomi(q,bounded){
- const u='https://nominatim.openstreetmap.org/search?format=json&limit=3&countrycodes=il&accept-language=he&q='+encodeURIComponent(q)+(bounded?'&viewbox='+BOX+'&bounded=1':'');
+ const u='https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=8&countrycodes=il&accept-language=he&q='+encodeURIComponent(q)+(bounded?'&viewbox='+BOX+'&bounded=1':'');
  const r=await fetch(u).then(r=>r.json());
- const h=r.find(x=>inArea(+x.lat,+x.lon));
- return h?{lat:+h.lat,lon:+h.lon,label:h.display_name.split(',').slice(0,3).join(',')}:null;
+ return r.filter(x=>inArea(+x.lat,+x.lon)).map(x=>{const a=x.address||{};
+  return {lat:+x.lat,lon:+x.lon,name:x.name||(x.display_name||'').split(',')[0],
+   street:a.road?(a.road+(a.house_number?' '+a.house_number:'')):'',
+   area:a.neighbourhood||a.suburb||a.quarter||'',city:a.city||a.town||''}});
 }
 async function photon(q){
- const u='https://photon.komoot.io/api/?limit=5&lat=32.08&lon=34.79&q='+encodeURIComponent(q);
+ const u='https://photon.komoot.io/api/?limit=8&lat=32.08&lon=34.79&q='+encodeURIComponent(q);
  const r=await fetch(u).then(r=>r.json());
- const f=(r.features||[]).find(x=>inArea(x.geometry.coordinates[1],x.geometry.coordinates[0]));
- if(!f)return null;const p=f.properties;
- return {lat:f.geometry.coordinates[1],lon:f.geometry.coordinates[0],label:[p.name,p.street&&(p.street+(p.housenumber?' '+p.housenumber:'')),p.city].filter(Boolean).join(', ')};
+ return (r.features||[]).filter(f=>inArea(f.geometry.coordinates[1],f.geometry.coordinates[0])).map(f=>{const p=f.properties;
+  return {lat:f.geometry.coordinates[1],lon:f.geometry.coordinates[0],name:p.name||'',
+   street:p.street?(p.street+(p.housenumber?' '+p.housenumber:'')):'',area:p.district||p.locality||'',city:p.city||''}});
 }
-async function geocode(q){
+async function geocodeAll(q){
  const city=/תל.?אביב|רמת.?גן|גבעתיים|tel.?aviv|ramat/i.test(q);
- const tries=[()=>nomi(q,true),()=>nomi(city?q:q+', תל אביב',false),()=>photon(city?q:q+' תל אביב'),()=>photon(q)];
- for(const t of tries){try{const h=await t();if(h)return h}catch(e){}}
- return null;
+ const jobs=[nomi(q,true),photon(city?q:q+' תל אביב'),nomi(city?q:q+', תל אביב',false)];
+ const res=(await Promise.allSettled(jobs)).flatMap(r=>r.status==='fulfilled'?r.value:[]);
+ const out=[];for(const h of res){if(!out.some(o=>dist(o.lat,o.lon,h.lat,h.lon)<250))out.push(h)}
+ return out.slice(0,6);
+}
+const label=h=>[h.name,h.street,h.area,h.city].filter((v,i,a)=>v&&a.indexOf(v)===i).join(' · ');
+let cands=[];
+function useHit(h,q){
+ const top=nearest(h.lat,h.lon)[0];
+ meetAddr=[h.name,h.street,h.area||h.city].filter(Boolean).join(', ')||q;
+ pickStop(top,`המקום: ${label(h)}\n`+(top.d>3000?`התחנה הקרובה רחוקה מהמקום (${fmtM(top.d)})`:`${walk(top.d)} דק׳ הליכה · ${fmtM(top.d)}`));
 }
 async function findAddr(){
  const q=$('addr').value.trim(),err=$('addrErr');
- if(!q){err.textContent='הקלידי כתובת קודם';err.classList.remove('hide');return}
- $('findBtn').textContent='מחפשת…';
+ if(!q){err.textContent='הקלידי כתובת או מקום';err.classList.remove('hide');return}
+ $('findBtn').textContent='מחפשת…';$('meetStop').innerHTML='';$('calCard').classList.add('hide');
  try{
-  const hit=await geocode(q);
-  if(!hit){err.textContent='לא מצאתי. נסי רחוב ומספר (למשל "אלנבי 94"), או בחרי תחנה מהרשימה.';err.classList.remove('hide');return}
-  const top=nearest(hit.lat,hit.lon)[0];
-  meetAddr=q;
-  pickStop(top,`נמצא: ${hit.label}\n`+(top.d>3000?`התחנה הקרובה רחוקה מהמקום (${fmtM(top.d)})`:`${walk(top.d)} דק׳ הליכה · ${fmtM(top.d)}`));
+  cands=await geocodeAll(q);
+  if(!cands.length){err.textContent='לא מצאתי. נסי להוסיף שכונה או רחוב (למשל "הפסאז\' רמת החייל"), או בחרי תחנה מהרשימה.';err.classList.remove('hide');return}
+  if(cands.length===1){useHit(cands[0],q);return}
+  $('meetStop').innerHTML=`<div class="card"><p class="lbl">מצאתי כמה מקומות. איזה מהם?</p>${cands.map((h,i)=>`<button class="btn pick" data-i="${i}" style="margin-top:8px;text-align:start;font-weight:400"><b>${esc(h.name||h.street)}</b><br><small style="color:var(--mut)">${esc([h.street!==h.name?h.street:'',h.area,h.city].filter(Boolean).join(' · '))}</small></button>`).join('')}</div>`;
+  document.querySelectorAll('.pick').forEach(b=>b.onclick=()=>useHit(cands[+b.dataset.i],q));
  }catch(e){err.textContent='אין חיבור לחיפוש כתובות כרגע. אפשר לבחור תחנה מהרשימה.';err.classList.remove('hide')}
  finally{$('findBtn').textContent='מצאי תחנה קרובה'}
 }

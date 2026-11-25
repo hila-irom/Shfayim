@@ -45,6 +45,9 @@ input,select{width:100%;font:inherit;font-size:16px;padding:11px 12px;border-rad
 .err{color:#C0392B;font-size:14px;margin:6px 0 0}
 .note{font-size:13px;color:var(--mut);text-align:center;margin:16px 0 0}
 .hide{display:none}
+.warn{background:#FFF4D6;color:#6B4A00;border:1px solid #F0D58A;border-radius:14px;padding:10px 14px;margin-bottom:10px;font-size:15px}
+.warn.off{background:#FCE8E6;color:#7A1F14;border-color:#F2B8B0}
+@media(prefers-color-scheme:dark){.warn{background:#3A2E0A;color:#F5DFA0;border-color:#5A4712}.warn.off{background:#3D1612;color:#F7C1B8;border-color:#6B2A22}}
 .spin{color:var(--mut);padding:24px 0;text-align:center}
 </style>
 </head>
@@ -58,6 +61,7 @@ input,select{width:100%;font:inherit;font-size:16px;padding:11px 12px;border-rad
   <button id="tMeet">קבעי פגישה</button>
 </nav>
 <main>
+  <div id="banner"></div>
   <section id="vNear">
     <div id="nearBox"><div class="spin">מאתרת את המיקום שלך…</div></div>
     <button class="btn" id="refresh">רענני מיקום</button>
@@ -95,10 +99,15 @@ input,select{width:100%;font:inherit;font-size:16px;padding:11px 12px;border-rad
       <label for="mDur">משך</label>
       <select id="mDur"><option value="30">30 דקות</option><option value="60" selected>שעה</option><option value="90">שעה וחצי</option><option value="120">שעתיים</option></select>
       <p class="err hide" id="calErr"></p>
+      <label for="mHome">זמן נסיעה ממך עד שפיים (דקות)</label>
+      <input id="mHome" type="number" inputmode="numeric" min="0" max="120" value="15">
+      <p class="meta" id="travelInfo"></p>
+      <p class="warn hide" id="mWarn" style="margin-top:10px"></p>
       <a class="btn pri" id="calBtn" style="margin-top:12px" href="#" target="_blank" rel="noopener">צרי אירוע ביומן גוגל</a>
+      <a class="btn" id="travBtn" style="margin-top:8px" href="#" target="_blank" rel="noopener">הוסיפי "נסיעה" ביומן</a>
     </div>
   </section>
-  <p class="note">מקור התחנות: מאגר משרד התחבורה ואתר הנתיבים המהירים (20fl.co.il), נכון ל-25.11.2026. זמני ההליכה משוערים. · גרסה 6</p>
+  <p class="note">מקור התחנות: מאגר משרד התחבורה ואתר הנתיבים המהירים (20fl.co.il), נכון ל-25.11.2026. זמני ההליכה משוערים. · גרסה 7</p>
 </main>
 
 <script>
@@ -110,6 +119,8 @@ const LINES={
  '814':{n:'יגאל אלון',c:'#2F8F3A'},
  '815':{n:'קריית עתידים',c:'#1F78B4'}
 };
+// scheduled minutes from Shefayim to each stop (MoT GTFS, 23.11.2026)
+const RIDE={20876:14,28581:17,20313:18,25625:19,25722:21,21238:22,21815:23,20314:12,28567:13,3174:14,21197:15,26255:16,20801:18,20029:18,4237:19,21675:17,20725:18,20726:19,25141:20,27117:21,20753:22,21487:18,21518:20,21454:22,23023:24,26302:13,21562:14,21163:17,21827:20,21829:21,21831:21,21716:27};
 // [code, name, lat, lon, line] — ordered by route
 const STOPS=[
  [20876,'דרך נמיר/שדרות שאול המלך',32.078509,34.793016,'811'],
@@ -144,7 +155,7 @@ const STOPS=[
  [21829,'ראול ולנברג/הנחושת',32.1097,34.837166,'815'],
  [21831,'מטה מרחב ירקון/ראול ולנברג',32.108777,34.835807,'815'],
  [21716,'שד׳ רוקח/בכור שטרית',32.107454,34.814433,'815']
-].map(s=>({code:s[0],name:s[1],lat:s[2],lon:s[3],line:s[4]}));
+].map(s=>({code:s[0],name:s[1],lat:s[2],lon:s[3],line:s[4],ride:RIDE[s[0]]}));
 
 const $=id=>document.getElementById(id);
 const esc=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -187,7 +198,7 @@ function showLine(){const l=$('lineSel').value;$('lineList').innerHTML=STOPS.fil
 $('lineSel').onchange=showLine;showLine();
 
 /* meeting */
-let meet=null,meetAddr='';
+let meet=null,meetAddr='',meetWalk=0;
 $('stopSel').innerHTML+=Object.keys(LINES).map(l=>`<optgroup label="קו ${l} · ${LINES[l].n}">${STOPS.map((s,i)=>s.line===l?`<option value="${i}">${esc(s.name)}</option>`:'').join('')}</optgroup>`).join('');
 /* saved + recent places (kept on this phone) */
 const LS={get(k){try{return JSON.parse(localStorage.getItem(k))||[]}catch(e){return[]}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
@@ -201,24 +212,25 @@ function renderPlaces(){
  document.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>usePlace(rc[+b.dataset.r],false));
  const e=$('editP');if(e)e.onclick=ev=>{ev.preventDefault();editing=!editing;renderPlaces()};
 }
-function usePlace(x,isSaved){const st=byCode(x.code);if(!st)return;meetAddr=x.addr;$('addr').value=x.addr;pickStop(st,(isSaved?`★ ${x.name} · `:'')+x.addr,true)}
+function usePlace(x,isSaved){const st=byCode(x.code);if(!st)return;meetWalk=0;meetAddr=x.addr;$('addr').value=x.addr;pickStop(st,(isSaved?`★ ${x.name} · `:'')+x.addr,true)}
 $('saveBtn').onclick=()=>{
  const n=$('saveName').value.trim()||meetAddr||meet.name;
  const sv=LS.get('saved').filter(x=>x.name!==n);sv.unshift({name:n,addr:meetAddr||meet.name,code:meet.code});LS.set('saved',sv.slice(0,12));
  $('saveMsg').classList.remove('hide');$('saveName').value='';renderPlaces();
 };
 function pickStop(s,extra,fromList){
+ if(meet!==s&&!extra) meetWalk=0;
  meet=s;
  const addr=meetAddr||s.name;
  const rc=LS.get('recent').filter(r=>!(r.code===s.code&&r.addr===addr));rc.unshift({addr,code:s.code});LS.set('recent',rc.slice(0,5));
  renderPlaces();
  $('saveCard').classList.toggle('hide',!!fromList);$('saveMsg').classList.add('hide');
- $('meetStop').innerHTML=`<div class="card"><p class="lbl">${extra?'התחנה הכי קרובה לפגישה':'התחנה שבחרת'}</p><p class="big">${esc(s.name)}</p>${pill(s.line)}${extra?`<p class="meta">${esc(extra)}</p>`:''}</div>`;
+ $('meetStop').innerHTML=`<div class="card"><p class="lbl">${extra?'התחנה הכי קרובה לפגישה':'התחנה שבחרת'}</p><p class="big">${esc(s.name)}</p>${pill(s.line)}${extra?`<p class="meta">${esc(extra)}</p>`:''}<p class="meta">${s.ride} דק׳ בשאטל משפיים (לפי לוח הזמנים)</p></div>`;
  $('calCard').classList.remove('hide');
  if(!$('mTitle').value) $('mTitle').value='פגישה';
  buildCal();
 }
-$('stopSel').onchange=()=>{const v=$('stopSel').value;if(v==='')return;meetAddr='';pickStop(STOPS[+v]);};
+$('stopSel').onchange=()=>{const v=$('stopSel').value;if(v==='')return;meetAddr='';meetWalk=0;pickStop(STOPS[+v]);};
 $('addr').oninput=()=>$('addrErr').classList.add('hide');
 /* address/place search: collect all matches in the TA area, let her choose */
 const BOX='34.74,32.13,34.86,32.03';
@@ -303,10 +315,11 @@ function useHit(h,q){
   const near=nearest(h.lat,h.lon).filter((x,i)=>i<2||x.d<500).slice(0,4);
   $('calCard').classList.add('hide');
   $('meetStop').innerHTML=`<div class="card"><p class="lbl">תחנות באזור ${esc(h.name)}. באיזו נוח לך?</p>${near.map((x,i)=>`<button class="btn pickS" data-i="${i}" style="margin-top:8px;text-align:start;font-weight:400"><b>${esc(x.name)}</b><br><small style="color:var(--mut)">קו ${x.line} · ${LINES[x.line].n}</small></button>`).join('')}</div>`;
-  document.querySelectorAll('.pickS').forEach(b=>b.onclick=()=>{const x=near[+b.dataset.i];meetAddr=h.name;pickStop(x,`באזור ${h.name}`)});
+  document.querySelectorAll('.pickS').forEach(b=>b.onclick=()=>{const x=near[+b.dataset.i];meetAddr=h.name;meetWalk=0;pickStop(x,`באזור ${h.name}`)});
   return;
  }
  const top=nearest(h.lat,h.lon)[0];
+ meetWalk=walk(top.d);
  meetAddr=[h.name,h.street,h.area||h.city].filter(Boolean).join(', ')||q;
  pickStop(top,`המקום: ${label(h)}\n`+(top.d>3000?`התחנה הקרובה רחוקה מהמקום (${fmtM(top.d)})`:`${walk(top.d)} דק׳ הליכה · ${fmtM(top.d)}`));
 }
@@ -338,6 +351,18 @@ function buildCal(){
  const f=x=>`${x.getFullYear()}${pad(x.getMonth()+1)}${pad(x.getDate())}T${pad(x.getHours())}${pad(x.getMinutes())}00`;
  const details=`ליד תחנת שאטל ${meet.line} (${LINES[meet.line].n}): ${meet.name}`+(meetAddr?`\nכתובת הפגישה: ${meetAddr}`:'')+`\nניווט לתחנה: ${gmaps(meet)}`;
  const loc=meetAddr||`${meet.name}, ${meet.lat},${meet.lon}`;
+ // travel event, like Hila's own "נסיעה" blocks: ends when the meeting starts
+ const peak=(x)=>{const mm=x.getHours()*60+x.getMinutes();return (mm>=390&&mm<600)||(mm>=870&&mm<1170)};
+ const wait=peak(s)?5:15, home=Math.max(0,+$('mHome').value||0), ride=meet.ride||20, wk=meetWalk||0;
+ const tot=home+wait+ride+wk, ts=new Date(s.getTime()-tot*60000);
+ $('travelInfo').textContent=`נסיעה: ${home} עד שפיים + ${wait} המתנה + ${ride} בשאטל`+(wk?` + ${wk} הליכה`:'')+` = ${tot} דק׳. יציאה ב-${pad(ts.getHours())}:${pad(ts.getMinutes())}.`;
+ const tdet=`שאטל ${meet.line} (${LINES[meet.line].n}) משפיים לתחנה ${meet.name}\n${$('travelInfo').textContent}\nניווט לתחנה: ${gmaps(meet)}`;
+ $('travBtn').href='https://calendar.google.com/calendar/render?action=TEMPLATE&text='+encodeURIComponent('נסיעה')+'&dates='+f(ts)+'/'+f(s)+'&ctz=Asia/Jerusalem&details='+encodeURIComponent(tdet);
+ const dw=s.getDay(),em=e.getHours()*60+e.getMinutes(),sm=ts.getHours()*60+ts.getMinutes();
+ const w=[];
+ if(dw===5||dw===6) w.push('השאטלים לא פועלים בשישי ובשבת.');
+ else{ if(sm<SVC.start) w.push('היציאה לפני 06:00, השאטלים עוד לא פועלים.'); if(em>SVC.end-30) w.push('הפגישה נגמרת קרוב ל-22:45. בדקי שתספיקי לחזור לשפיים.'); }
+ $('mWarn').textContent=w.join(' ');$('mWarn').classList.toggle('hide',!w.length);
  $('calBtn').href='https://calendar.google.com/calendar/render?action=TEMPLATE'
   +'&text='+encodeURIComponent($('mTitle').value||'פגישה')
   +'&dates='+f(s)+'/'+f(e)+'&ctz=Asia/Jerusalem'
@@ -346,6 +371,24 @@ function buildCal(){
 }
 ['mTitle','mDate','mTime','mDur'].forEach(id=>$(id).addEventListener('input',buildCal));
 
+/* temporary changes from the official site (updated weekly) */
+const NOTICES=[
+ {line:'815',until:'2026-11-26',text:'קו 815: מ-21:30 עד סוף הפעילות, התחנות ראול ולנברג/הנחושת, ראול ולנברג/הברזל ומטה מרחב ירקון מבוטלות (עד 26.11).'}
+];
+const SVC={start:6*60,end:22*60+45};
+function banner(){
+ const now=new Date(),d=now.getDay(),m=now.getHours()*60+now.getMinutes(),today=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+ let h='';
+ const act=NOTICES.filter(n=>n.until>=today);
+ h+=act.map(n=>`<div class="warn">⚠ ${esc(n.text)}</div>`).join('');
+ const work=d>=0&&d<=4;
+ if(!work||m<SVC.start||m>=SVC.end) h+=`<div class="warn off">השאטלים לא פועלים עכשיו. שעות הפעילות: א׳–ה׳, 06:00 עד 22:45.</div>`;
+ else if(SVC.end-m<=60) h+=`<div class="warn">שימי לב: השאטלים פועלים עד 22:45, עוד ${SVC.end-m} דק׳.</div>`;
+ $('banner').innerHTML=h;
+}
+banner();setInterval(banner,60000);
+try{const hm=localStorage.getItem('homeMin');if(hm)$('mHome').value=hm}catch(e){}
+$('mHome').addEventListener('input',()=>{try{localStorage.setItem('homeMin',$('mHome').value)}catch(e){};buildCal()});
 renderPlaces();
 locate();
 }

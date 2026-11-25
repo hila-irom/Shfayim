@@ -28,6 +28,7 @@ main{max-width:560px;margin:auto;padding:12px 16px calc(env(safe-area-inset-bott
 .card{background:var(--card);border-radius:18px;padding:16px;margin-bottom:12px;border:1px solid var(--line)}
 .lbl{font-size:14px;color:var(--mut);margin:0}
 .big{font-size:26px;font-weight:700;line-height:1.15;margin:4px 0 8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 4px}.chip{font:inherit;font-size:15px;padding:7px 12px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}.chip.star{border-color:var(--go);color:var(--go);font-weight:600}.chip .x{margin-inline-start:6px;color:#C0392B;font-weight:700}
 .pill{display:inline-block;font-size:14px;font-weight:600;padding:3px 10px;border-radius:999px;color:#fff;margin:0 0 0 6px}
 .meta{color:var(--mut);font-size:15px;margin:8px 0 0;white-space:pre-line}
 .btns{display:flex;gap:8px;margin-top:12px}
@@ -69,6 +70,8 @@ input,select{width:100%;font:inherit;font-size:16px;padding:11px 12px;border-rad
 
   <section id="vMeet" class="hide">
     <div class="card">
+      <div id="savedBox"></div>
+      <div id="recentBox"></div>
       <label for="addr" style="margin-top:0">כתובת הפגישה</label>
       <input id="addr" placeholder="ז'בוטינסקי 7, רמת גן" autocomplete="street-address">
       <button class="btn pri" id="findBtn" style="margin-top:10px">מצאי תחנה קרובה</button>
@@ -77,6 +80,11 @@ input,select{width:100%;font:inherit;font-size:16px;padding:11px 12px;border-rad
       <select id="stopSel"><option value="">בחרי תחנה…</option></select>
     </div>
     <div id="meetStop"></div>
+    <div class="card hide" id="saveCard">
+      <p class="lbl" style="margin-bottom:6px">לשמור כמקום קבוע?</p>
+      <div style="display:flex;gap:8px"><input id="saveName" placeholder="למשל: הלקוח ברמת החייל"><button class="btn" id="saveBtn" style="flex:none;width:auto;padding:0 16px">שמרי</button></div>
+      <p class="lbl hide" id="saveMsg" style="margin-top:6px;color:var(--go)">נשמר ✓</p>
+    </div>
     <div class="card hide" id="calCard">
       <label for="mTitle" style="margin-top:0">נושא</label>
       <input id="mTitle" placeholder="פגישה">
@@ -90,7 +98,7 @@ input,select{width:100%;font:inherit;font-size:16px;padding:11px 12px;border-rad
       <a class="btn pri" id="calBtn" style="margin-top:12px" href="#" target="_blank" rel="noopener">צרי אירוע ביומן גוגל</a>
     </div>
   </section>
-  <p class="note">מקור התחנות: מאגר משרד התחבורה ואתר הנתיבים המהירים (20fl.co.il), נכון ל-25.11.2026. זמני ההליכה משוערים. · גרסה 5</p>
+  <p class="note">מקור התחנות: מאגר משרד התחבורה ואתר הנתיבים המהירים (20fl.co.il), נכון ל-25.11.2026. זמני ההליכה משוערים. · גרסה 6</p>
 </main>
 
 <script>
@@ -181,8 +189,30 @@ $('lineSel').onchange=showLine;showLine();
 /* meeting */
 let meet=null,meetAddr='';
 $('stopSel').innerHTML+=Object.keys(LINES).map(l=>`<optgroup label="קו ${l} · ${LINES[l].n}">${STOPS.map((s,i)=>s.line===l?`<option value="${i}">${esc(s.name)}</option>`:'').join('')}</optgroup>`).join('');
-function pickStop(s,extra){
+/* saved + recent places (kept on this phone) */
+const LS={get(k){try{return JSON.parse(localStorage.getItem(k))||[]}catch(e){return[]}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let editing=false;
+const byCode=c=>STOPS.find(x=>x.code===c);
+function renderPlaces(){
+ const sv=LS.get('saved'),rc=LS.get('recent').filter(r=>!sv.some(x=>x.code===r.code&&x.addr===r.addr));
+ $('savedBox').innerHTML=sv.length?`<p class="lbl">המקומות שלי <a href="#" id="editP" style="color:var(--mut);font-size:13px;margin-inline-start:6px">${editing?'סיום':'עריכה'}</a></p><div class="chips">${sv.map((x,i)=>`<button class="chip star" data-s="${i}">★ ${esc(x.name)}${editing?'<span class="x">×</span>':''}</button>`).join('')}</div>`:'';
+ $('recentBox').innerHTML=rc.length?`<p class="lbl">אחרונים</p><div class="chips">${rc.slice(0,5).map((x,i)=>`<button class="chip" data-r="${i}">${esc(x.addr)}</button>`).join('')}</div>`:'';
+ document.querySelectorAll('[data-s]').forEach(b=>b.onclick=()=>{const i=+b.dataset.s;if(editing){sv.splice(i,1);LS.set('saved',sv);renderPlaces();return}usePlace(sv[i],true)});
+ document.querySelectorAll('[data-r]').forEach(b=>b.onclick=()=>usePlace(rc[+b.dataset.r],false));
+ const e=$('editP');if(e)e.onclick=ev=>{ev.preventDefault();editing=!editing;renderPlaces()};
+}
+function usePlace(x,isSaved){const st=byCode(x.code);if(!st)return;meetAddr=x.addr;$('addr').value=x.addr;pickStop(st,(isSaved?`★ ${x.name} · `:'')+x.addr,true)}
+$('saveBtn').onclick=()=>{
+ const n=$('saveName').value.trim()||meetAddr||meet.name;
+ const sv=LS.get('saved').filter(x=>x.name!==n);sv.unshift({name:n,addr:meetAddr||meet.name,code:meet.code});LS.set('saved',sv.slice(0,12));
+ $('saveMsg').classList.remove('hide');$('saveName').value='';renderPlaces();
+};
+function pickStop(s,extra,fromList){
  meet=s;
+ const addr=meetAddr||s.name;
+ const rc=LS.get('recent').filter(r=>!(r.code===s.code&&r.addr===addr));rc.unshift({addr,code:s.code});LS.set('recent',rc.slice(0,5));
+ renderPlaces();
+ $('saveCard').classList.toggle('hide',!!fromList);$('saveMsg').classList.add('hide');
  $('meetStop').innerHTML=`<div class="card"><p class="lbl">${extra?'התחנה הכי קרובה לפגישה':'התחנה שבחרת'}</p><p class="big">${esc(s.name)}</p>${pill(s.line)}${extra?`<p class="meta">${esc(extra)}</p>`:''}</div>`;
  $('calCard').classList.remove('hide');
  if(!$('mTitle').value) $('mTitle').value='פגישה';
@@ -283,7 +313,7 @@ function useHit(h,q){
 async function findAddr(){
  const q=$('addr').value.trim(),err=$('addrErr');
  if(!q){err.textContent='הקלידי כתובת או מקום';err.classList.remove('hide');return}
- $('findBtn').textContent='מחפשת…';$('meetStop').innerHTML='';$('calCard').classList.add('hide');
+ $('findBtn').textContent='מחפשת…';$('meetStop').innerHTML='';$('calCard').classList.add('hide');$('saveCard').classList.add('hide');
  try{
   cands=await geocodeAll(q);
   if(!cands.length){err.textContent='לא מצאתי. נסי להוסיף שכונה או רחוב (למשל "הפסאז\' רמת החייל"), או בחרי תחנה מהרשימה.';err.classList.remove('hide');return}
@@ -316,6 +346,7 @@ function buildCal(){
 }
 ['mTitle','mDate','mTime','mDur'].forEach(id=>$(id).addEventListener('input',buildCal));
 
+renderPlaces();
 locate();
 }
 </script>

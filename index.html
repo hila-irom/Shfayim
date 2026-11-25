@@ -90,7 +90,7 @@ input,select{width:100%;font:inherit;font-size:16px;padding:11px 12px;border-rad
       <a class="btn pri" id="calBtn" style="margin-top:12px" href="#" target="_blank" rel="noopener">צרי אירוע ביומן גוגל</a>
     </div>
   </section>
-  <p class="note">מקור התחנות: מאגר משרד התחבורה ואתר הנתיבים המהירים (20fl.co.il), נכון ל-25.11.2026. זמני ההליכה משוערים. · גרסה 3</p>
+  <p class="note">מקור התחנות: מאגר משרד התחבורה ואתר הנתיבים המהירים (20fl.co.il), נכון ל-25.11.2026. זמני ההליכה משוערים. · גרסה 4</p>
 </main>
 
 <script>
@@ -208,11 +208,62 @@ async function photon(q){
   return {lat:f.geometry.coordinates[1],lon:f.geometry.coordinates[0],name:p.name||'',
    street:p.street?(p.street+(p.housenumber?' '+p.housenumber:'')):'',area:p.district||p.locality||'',city:p.city||''}});
 }
+/* local knowledge: areas the shuttles serve, typo-tolerant */
+const norm=t=>(' '+t+' ').toLowerCase().replace(/["'׳״`’]/g,'').replace(/[\/,.\-]/g,' ').replace(/יי/g,'י').replace(/וו/g,'ו').replace(/קרית/g,'קירית').replace(/\s+/g,' ');
+const AREAS=[
+ [['רמת החייל','רמת החיל'],[21827,21829,21831,21163]],
+ [['קריית עתידים','עתידים'],[21829,21831]],
+ [['הבורסה','בורסה','בורסת היהלומים'],[20801,26255,20029]],
+ [['עזריאלי','קריית הממשלה','הקריה'],[21675]],
+ [['שרונה'],[28581]],
+ [['איכילוב','סוראסקי'],[21815]],
+ [['בית המשפט'],[21238]],
+ [['מוזיאון תל אביב','האופרה'],[25722]],
+ [['סבידור','רכבת מרכז','מסוף 2000'],[20314]],
+ [['אוניברסיטה','רכבת האוניברסיטה'],[26302]],
+ [['לונה פארק','גני התערוכה','אקספו'],[21562]],
+ [['מגדל אלקטרה','רכבת השלום'],[21487]]
+].map(([names,codes])=>{const ss=STOPS.filter(x=>codes.includes(x.code));
+ return {names,lat:ss.reduce((a,x)=>a+x.lat,0)/ss.length,lon:ss.reduce((a,x)=>a+x.lon,0)/ss.length}});
+const STOPWORDS=['תל','אביב','רמת','גן','יפו','ליד','באזור','אזור','של'];
+const lev=(a,b)=>{const m=[...Array(b.length+1).keys()];for(let i=1;i<=a.length;i++){let p=m[0];m[0]=i;for(let j=1;j<=b.length;j++){const t=m[j];m[j]=Math.min(m[j]+1,m[j-1]+1,p+(a[i-1]===b[j-1]?0:1));p=t}}return m[b.length]};
+const strip=w=>w.length>4&&'בלמוכש'.includes(w[0])?w.slice(1):w;
+const core=w=>w.replace(/^ה/,'');
+// find an area name inside the query: tolerant to prefixes (בבורסה), missing ה, one typo
+function findArea(nq){
+ const qw=nq.trim().split(' ');
+ for(const a of AREAS)for(const n of a.names){
+  const nw=norm(n).trim().split(' ');
+  for(let i=0;i+nw.length<=qw.length;i++){
+   const win=qw.slice(i,i+nw.length);
+   const A=win.map(w=>core(strip(w))).join(' '),B=nw.map(core).join(' '),A2=win.map(core).join(' ');
+   const tol=B.length>=6?1:0;
+   if(lev(A,B)<=tol||lev(A2,B)<=tol) return {area:a,used:win};
+  }
+ }
+ return null;
+}
 async function geocodeAll(q){
- const city=/תל.?אביב|רמת.?גן|גבעתיים|tel.?aviv|ramat/i.test(q);
- const jobs=[nomi(q,true),photon(city?q:q+' תל אביב'),nomi(city?q:q+', תל אביב',false)];
- const res=(await Promise.allSettled(jobs)).flatMap(r=>r.status==='fulfilled'?r.value:[]);
- const out=[];for(const h of res){if(!out.some(o=>dist(o.lat,o.lon,h.lat,h.lon)<250))out.push(h)}
+ const nq=norm(q);
+ const f=findArea(nq),area=f&&f.area;
+ // words left after removing the area name and generic words = the place itself
+ const words=nq.trim().split(' ').filter(w=>!(f&&f.used.includes(w))).filter(w=>w.length>=3&&!STOPWORDS.includes(w));
+ // stops whose street the query names directly (e.g. "ולנברג", "קפלן")
+ const streetStops=STOPS.filter(x=>norm(x.name).split(' ').some(w=>w.length>=4&&words.includes(w)));
+ let hits=[];
+ if(words.length){
+  const city=/תל.?אביב|רמת.?גן|גבעתיים|tel.?aviv|ramat/i.test(q);
+  const qq=words.join(' ')+(area?' '+area.names[0]:'');
+  const jobs=[nomi(qq,true),photon(city||area?qq:qq+' תל אביב')];
+  hits=(await Promise.allSettled(jobs)).flatMap(r=>r.status==='fulfilled'?r.value:[]);
+  // keep only results that actually match what she typed
+  hits=hits.filter(h=>{const t=norm(h.name+' '+h.street);return words.some(w=>t.includes(w))});
+  if(area) hits=hits.filter(h=>dist(h.lat,h.lon,area.lat,area.lon)<2500);
+ }
+ const out=[];
+ for(const h of hits){if(!out.some(o=>dist(o.lat,o.lon,h.lat,h.lon)<250))out.push(h)}
+ if(area) out.push({lat:area.lat,lon:area.lon,name:area.names[0],street:'',area:'האזור כולו',city:''});
+ for(const x of streetStops) if(!out.some(o=>dist(o.lat,o.lon,x.lat,x.lon)<250)) out.push({lat:x.lat,lon:x.lon,name:x.name,street:'',area:'תחנה',city:''});
  return out.slice(0,6);
 }
 const label=h=>[h.name,h.street,h.area,h.city].filter((v,i,a)=>v&&a.indexOf(v)===i).join(' · ');

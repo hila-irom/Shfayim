@@ -1,0 +1,11 @@
+{
+  "name": "שאטלים שפיים",
+  "short_name": "שאטל שפיים",
+  "lang": "he",
+  "dir": "rtl",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#F4F5FA",
+  "theme_color": "#1B2266",
+  "icons": [{ "src": "icon.png", "sizes": "512x512", "type": "image/png" }]
+}

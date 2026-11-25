@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>שאטלים שפיים</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="שאטל שפיים">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#1B2266">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon.png">
+<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#1B2266;--bg:#F4F5FA;--card:#fff;--ink:#14172E;--mut:#5C6080;--line:#E3E5EF;--go:#0F6E56;--soft:#E1F5EE}
+@media(prefers-color-scheme:dark){:root{--bg:#0E1024;--card:#1A1D38;--ink:#EEF0FA;--mut:#A3A7C4;--line:#2C3054;--soft:#123B33}}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.5 Assistant,system-ui,-apple-system,sans-serif;-webkit-tap-highlight-color:transparent}
+header{background:var(--navy);color:#fff;padding:calc(env(safe-area-inset-top) + 14px) 18px 14px}
+header h1{margin:0;font-size:22px;font-weight:700}
+header p{margin:2px 0 0;font-size:14px;opacity:.85}
+nav{display:flex;gap:8px;padding:12px 16px 0;max-width:560px;margin:auto}
+nav button{flex:1;font:inherit;font-size:16px;font-weight:600;padding:10px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+nav button.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+main{max-width:560px;margin:auto;padding:12px 16px calc(env(safe-area-inset-bottom) + 28px)}
+.card{background:var(--card);border-radius:18px;padding:16px;margin-bottom:12px;border:1px solid var(--line)}
+.lbl{font-size:14px;color:var(--mut);margin:0}
+.big{font-size:26px;font-weight:700;line-height:1.15;margin:4px 0 8px}
+.pill{display:inline-block;font-size:14px;font-weight:600;padding:3px 10px;border-radius:999px;color:#fff;margin:0 0 0 6px}
+.meta{color:var(--mut);font-size:15px;margin:8px 0 0}
+.btns{display:flex;gap:8px;margin-top:12px}
+.btn{flex:1;display:block;text-align:center;font:inherit;font-weight:600;font-size:16px;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);text-decoration:none;cursor:pointer}
+.pri{background:var(--go);border-color:var(--go);color:#fff}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 0;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.row b{font-weight:600}
+.row small{color:var(--mut);white-space:nowrap}
+.row a{color:var(--go);font-weight:600;text-decoration:none;white-space:nowrap}
+label{display:block;font-size:14px;color:var(--mut);margin:12px 0 4px}
+input,select{width:100%;font:inherit;font-size:16px;padding:11px 12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.err{color:#C0392B;font-size:14px;margin:6px 0 0}
+.note{font-size:13px;color:var(--mut);text-align:center;margin:16px 0 0}
+.hide{display:none}
+.spin{color:var(--mut);padding:24px 0;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <h1>שאטלים שפיים</h1>
+  <p>קווים 811 עד 815 · א׳–ה׳, 06:00 עד 22:45 · חינם</p>
+</header>
+<nav>
+  <button id="tNear" class="on">התחנה הקרובה</button>
+  <button id="tMeet">קבעי פגישה</button>
+</nav>
+<main>
+  <section id="vNear">
+    <div id="nearBox"><div class="spin">מאתרת את המיקום שלך…</div></div>
+    <button class="btn" id="refresh">רענני מיקום</button>
+    <div class="card" style="margin-top:12px">
+      <p class="lbl" style="margin-bottom:6px">כל התחנות לפי קו</p>
+      <select id="lineSel"></select>
+      <div id="lineList" style="margin-top:6px"></div>
+    </div>
+  </section>
+
+  <section id="vMeet" class="hide">
+    <div class="card">
+      <label for="addr" style="margin-top:0">כתובת הפגישה</label>
+      <input id="addr" placeholder="ז'בוטינסקי 7, רמת גן" autocomplete="street-address">
+      <button class="btn pri" id="findBtn" style="margin-top:10px">מצאי תחנה קרובה</button>
+      <p class="err hide" id="addrErr"></p>
+      <label for="stopSel">או בחרי תחנה ישירות</label>
+      <select id="stopSel"><option value="">בחרי תחנה…</option></select>
+    </div>
+    <div id="meetStop"></div>
+    <div class="card hide" id="calCard">
+      <label for="mTitle" style="margin-top:0">נושא</label>
+      <input id="mTitle" placeholder="פגישה">
+      <div class="two">
+        <div><label for="mDate">תאריך</label><input id="mDate" type="date"></div>
+        <div><label for="mTime">שעה</label><input id="mTime" type="time" value="10:00"></div>
+      </div>
+      <label for="mDur">משך</label>
+      <select id="mDur"><option value="30">30 דקות</option><option value="60" selected>שעה</option><option value="90">שעה וחצי</option><option value="120">שעתיים</option></select>
+      <p class="err hide" id="calErr"></p>
+      <a class="btn pri" id="calBtn" style="margin-top:12px" href="#" target="_blank" rel="noopener">צרי אירוע ביומן גוגל</a>
+    </div>
+  </section>
+  <p class="note">מקור התחנות: מאגר משרד התחבורה ואתר הנתיבים המהירים (20fl.co.il), נכון ל-25.11.2026. זמני ההליכה משוערים.</p>
+</main>
+
+<script>
+{
+const LINES={
+ '811':{n:'הקריה',c:'#5B4FC4'},
+ '812':{n:'הבורסה',c:'#C2417A'},
+ '813':{n:'בגין-המסגר',c:'#D0661F'},
+ '814':{n:'יגאל אלון',c:'#2F8F3A'},
+ '815':{n:'קריית עתידים',c:'#1F78B4'}
+};
+// [code, name, lat, lon, line] — ordered by route
+const STOPS=[
+ [20876,'דרך נמיר/שדרות שאול המלך',32.078509,34.793016,'811'],
+ [28581,'מתחם שרונה/אליעזר קפלן',32.073491,34.787018,'811'],
+ [20313,'אליעזר קפלן/דובנוב',32.07356,34.783258,'811'],
+ [25625,'לונדון מיניסטור/אבן גבירול',32.074469,34.781836,'811'],
+ [25722,'האופרה/שד׳ שאול המלך',32.075623,34.784789,'811'],
+ [21238,'בית המשפט/ויצמן',32.078868,34.788581,'811'],
+ [21815,'בי״ח איכילוב/ויצמן',32.080816,34.788879,'811'],
+ [20314,'רכבת סבידור מרכז/גשר מודעי',32.085026,34.798515,'812'],
+ [28567,'דרך בגין/יצחק מודעי',32.08548,34.800364,'812'],
+ [3174,'אהליאב/היצירה',32.087443,34.802415,'812'],
+ [21197,'ביאליק/תובל',32.088275,34.80462,'812'],
+ [26255,'דרך אבא הלל/ביאליק',32.086969,34.805391,'812'],
+ [20801,'רק״ל אבא הלל/ז׳בוטינסקי',32.083007,34.802159,'812'],
+ [20029,'זיסמן/דרך בגין',32.084093,34.800513,'812'],
+ [4237,'יעקב דורי/דרך מנחם בגין',32.085081,34.799427,'812'],
+ [21675,'קריית הממשלה/דרך מנחם בגין',32.072279,34.789606,'813'],
+ [20725,'דרך מנחם בגין/החשמונאים',32.068718,34.786781,'813'],
+ [20726,'דרך מנחם בגין/המלאכה',32.067185,34.784932,'813'],
+ [25141,'דרך מנחם בגין/נחמני',32.064395,34.781449,'813'],
+ [27117,'הרכבת/סלומון',32.062285,34.78004,'813'],
+ [20753,'הרכבת/ראש פינה',32.059633,34.782976,'813'],
+ [21487,'יגאל אלון/דרך השלום',32.071549,34.794118,'814'],
+ [21518,'יגאל אלון/קרמניצקי',32.067602,34.792921,'814'],
+ [21454,'יגאל אלון/הפלמ״ח',32.062878,34.792016,'814'],
+ [23023,'לה גוארדיה/המעפילים',32.059392,34.788682,'814'],
+ [26302,'רכבת האוניברסיטה/שד׳ רוקח',32.102783,34.80697,'815'],
+ [21562,'לונה פארק/שד׳ רוקח',32.105513,34.81257,'815'],
+ [21163,'מרכז הספורט/בכור שטרית',32.105868,34.820154,'815'],
+ [21827,'ראול ולנברג/הברזל',32.107031,34.833789,'815'],
+ [21829,'ראול ולנברג/הנחושת',32.1097,34.837166,'815'],
+ [21831,'מטה מרחב ירקון/ראול ולנברג',32.108777,34.835807,'815'],
+ [21716,'שד׳ רוקח/בכור שטרית',32.107454,34.814433,'815']
+].map(s=>({code:s[0],name:s[1],lat:s[2],lon:s[3],line:s[4]}));
+
+const $=id=>document.getElementById(id);
+const esc=t=>String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const dist=(a,b,c,d)=>{const R=6371000,r=x=>x*Math.PI/180,dl=r(c-a),dn=r(d-b);const h=Math.sin(dl/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dn/2)**2;return 2*R*Math.asin(Math.sqrt(h))};
+const walk=m=>Math.max(1,Math.ceil(m*1.25/80));
+const fmtM=m=>m<1000?Math.round(m/10)*10+' מ׳':(m/1000).toFixed(1)+' ק״מ';
+const pill=l=>`<span class="pill" style="background:${LINES[l].c}">${l} · ${LINES[l].n}</span>`;
+const waze=s=>`https://waze.com/ul?ll=${s.lat},${s.lon}&navigate=yes`;
+const gmaps=s=>`https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lon}&travelmode=walking`;
+const nearest=(lat,lon)=>STOPS.map(s=>({...s,d:dist(lat,lon,s.lat,s.lon)})).sort((a,b)=>a.d-b.d);
+
+/* tabs */
+function tab(n){const near=n==='near';$('vNear').classList.toggle('hide',!near);$('vMeet').classList.toggle('hide',near);$('tNear').classList.toggle('on',near);$('tMeet').classList.toggle('on',!near);}
+$('tNear').onclick=()=>tab('near');$('tMeet').onclick=()=>tab('meet');
+
+/* nearest to me */
+function showNear(lat,lon){
+ const all=nearest(lat,lon),top=all[0],far=top.d>5000;
+ const more=all.slice(1,5).map(s=>`<div class="row"><span><b>${esc(s.name)}</b><br><small>קו ${s.line} · ${walk(s.d)} דק׳ הליכה</small></span><a href="${gmaps(s)}" target="_blank" rel="noopener">ניווט</a></div>`).join('');
+ $('nearBox').innerHTML=`<div class="card">
+  ${far?`<p class="err">את רחוקה מהתחנות (${fmtM(top.d)}). זו התחנה הכי קרובה בכל זאת:</p>`:''}
+  <p class="lbl">התחנה הקרובה אלייך</p>
+  <p class="big">${esc(top.name)}</p>${pill(top.line)}
+  <p class="meta">${far?fmtM(top.d):walk(top.d)+' דק׳ הליכה · '+fmtM(top.d)}</p>
+  <div class="btns"><a class="btn pri" href="${waze(top)}" target="_blank" rel="noopener">נווטי בוויז</a><a class="btn" href="${gmaps(top)}" target="_blank" rel="noopener">Google Maps</a></div>
+ </div><div class="card"><p class="lbl">עוד תחנות קרובות</p>${more}</div>`;
+}
+function locate(){
+ $('nearBox').innerHTML='<div class="spin">מאתרת את המיקום שלך…</div>';
+ if(!navigator.geolocation){$('nearBox').innerHTML='<div class="card"><p class="err">הדפדפן לא תומך באיתור מיקום. אפשר לבחור קו מהרשימה למטה.</p></div>';return}
+ navigator.geolocation.getCurrentPosition(p=>showNear(p.coords.latitude,p.coords.longitude),
+  e=>{$('nearBox').innerHTML=`<div class="card"><p class="err">${e.code===1?'אין הרשאת מיקום. באייפון: הגדרות ← פרטיות ← שירותי מיקום ← Safari ← "בזמן השימוש".':'לא הצלחתי לאתר מיקום. נסי שוב.'}</p></div>`},
+  {enableHighAccuracy:true,timeout:12000,maximumAge:30000});
+}
+$('refresh').onclick=locate;
+
+/* list by line */
+$('lineSel').innerHTML=Object.keys(LINES).map(l=>`<option value="${l}">קו ${l} · ${LINES[l].n}</option>`).join('');
+function showLine(){const l=$('lineSel').value;$('lineList').innerHTML=STOPS.filter(s=>s.line===l).map((s,i)=>`<div class="row"><span>${i+1}. ${esc(s.name)}</span><a href="${gmaps(s)}" target="_blank" rel="noopener">ניווט</a></div>`).join('')}
+$('lineSel').onchange=showLine;showLine();
+
+/* meeting */
+let meet=null,meetAddr='';
+$('stopSel').innerHTML+=Object.keys(LINES).map(l=>`<optgroup label="קו ${l} · ${LINES[l].n}">${STOPS.map((s,i)=>s.line===l?`<option value="${i}">${esc(s.name)}</option>`:'').join('')}</optgroup>`).join('');
+function pickStop(s,extra){
+ meet=s;
+ $('meetStop').innerHTML=`<div class="card"><p class="lbl">${extra?'התחנה הכי קרובה לפגישה':'התחנה שבחרת'}</p><p class="big">${esc(s.name)}</p>${pill(s.line)}${extra?`<p class="meta">${esc(extra)}</p>`:''}</div>`;
+ $('calCard').classList.remove('hide');
+ if(!$('mTitle').value) $('mTitle').value='פגישה';
+ buildCal();
+}
+$('stopSel').onchange=()=>{const v=$('stopSel').value;if(v==='')return;meetAddr='';pickStop(STOPS[+v]);};
+$('addr').oninput=()=>$('addrErr').classList.add('hide');
+async function findAddr(){
+ const q=$('addr').value.trim(),err=$('addrErr');
+ if(!q){err.textContent='הקלידי כתובת קודם';err.classList.remove('hide');return}
+ $('findBtn').textContent='מחפשת…';
+ try{
+  const qq=/תל.?אביב|רמת.?גן|גבעתיים|בני.?ברק|tel.?aviv|ramat/i.test(q)?q:q+', תל אביב';
+  const u='https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=il&accept-language=he&q='+encodeURIComponent(qq);
+  const r=await fetch(u).then(r=>r.json());
+  if(!r.length){err.textContent='לא מצאתי את הכתובת. נסי לכתוב אחרת, או לבחור תחנה מהרשימה.';err.classList.remove('hide');return}
+  const lat=+r[0].lat,lon=+r[0].lon,top=nearest(lat,lon)[0];
+  meetAddr=q;
+  pickStop(top,top.d>3000?`התחנה הקרובה רחוקה מהכתובת (${fmtM(top.d)})`:`${walk(top.d)} דק׳ הליכה מהכתובת · ${fmtM(top.d)}`);
+ }catch(e){err.textContent='אין חיבור לחיפוש כתובות כרגע. אפשר לבחור תחנה מהרשימה.';err.classList.remove('hide')}
+ finally{$('findBtn').textContent='מצאי תחנה קרובה'}
+}
+$('findBtn').onclick=findAddr;
+$('addr').onkeydown=e=>{if(e.key==='Enter')findAddr()};
+
+const pad=n=>String(n).padStart(2,'0');
+const today=new Date();$('mDate').value=`${today.getFullYear()}-${pad(today.getMonth()+1)}-${pad(today.getDate())}`;
+function buildCal(){
+ if(!meet)return;
+ const d=$('mDate').value,t=$('mTime').value,err=$('calErr');
+ if(!d||!t){err.textContent='בחרי תאריך ושעה';err.classList.remove('hide');$('calBtn').removeAttribute('href');return}
+ err.classList.add('hide');
+ const [Y,M,D]=d.split('-').map(Number),[h,m]=t.split(':').map(Number);
+ const s=new Date(Y,M-1,D,h,m),e=new Date(s.getTime()+(+$('mDur').value)*60000);
+ const f=x=>`${x.getFullYear()}${pad(x.getMonth()+1)}${pad(x.getDate())}T${pad(x.getHours())}${pad(x.getMinutes())}00`;
+ const details=`ליד תחנת שאטל ${meet.line} (${LINES[meet.line].n}): ${meet.name}`+(meetAddr?`\nכתובת הפגישה: ${meetAddr}`:'')+`\nניווט לתחנה: ${gmaps(meet)}`;
+ const loc=meetAddr||`${meet.name}, ${meet.lat},${meet.lon}`;
+ $('calBtn').href='https://calendar.google.com/calendar/render?action=TEMPLATE'
+  +'&text='+encodeURIComponent($('mTitle').value||'פגישה')
+  +'&dates='+f(s)+'/'+f(e)+'&ctz=Asia/Jerusalem'
+  +'&location='+encodeURIComponent(loc)
+  +'&details='+encodeURIComponent(details);
+}
+['mTitle','mDate','mTime','mDur'].forEach(id=>$(id).addEventListener('input',buildCal));
+
+locate();
+}
+</script>
+</body>
+</html>

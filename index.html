@@ -90,7 +90,7 @@ input,select{width:100%;font:inherit;font-size:16px;padding:11px 12px;border-rad
       <a class="btn pri" id="calBtn" style="margin-top:12px" href="#" target="_blank" rel="noopener">צרי אירוע ביומן גוגל</a>
     </div>
   </section>
-  <p class="note">מקור התחנות: מאגר משרד התחבורה ואתר הנתיבים המהירים (20fl.co.il), נכון ל-25.11.2026. זמני ההליכה משוערים. · גרסה 4</p>
+  <p class="note">מקור התחנות: מאגר משרד התחבורה ואתר הנתיבים המהירים (20fl.co.il), נכון ל-25.11.2026. זמני ההליכה משוערים. · גרסה 5</p>
 </main>
 
 <script>
@@ -269,6 +269,13 @@ async function geocodeAll(q){
 const label=h=>[h.name,h.street,h.area,h.city].filter((v,i,a)=>v&&a.indexOf(v)===i).join(' · ');
 let cands=[];
 function useHit(h,q){
+ if(h.area==='האזור כולו'){
+  const near=nearest(h.lat,h.lon).filter((x,i)=>i<2||x.d<500).slice(0,4);
+  $('calCard').classList.add('hide');
+  $('meetStop').innerHTML=`<div class="card"><p class="lbl">תחנות באזור ${esc(h.name)}. באיזו נוח לך?</p>${near.map((x,i)=>`<button class="btn pickS" data-i="${i}" style="margin-top:8px;text-align:start;font-weight:400"><b>${esc(x.name)}</b><br><small style="color:var(--mut)">קו ${x.line} · ${LINES[x.line].n}</small></button>`).join('')}</div>`;
+  document.querySelectorAll('.pickS').forEach(b=>b.onclick=()=>{const x=near[+b.dataset.i];meetAddr=h.name;pickStop(x,`באזור ${h.name}`)});
+  return;
+ }
  const top=nearest(h.lat,h.lon)[0];
  meetAddr=[h.name,h.street,h.area||h.city].filter(Boolean).join(', ')||q;
  pickStop(top,`המקום: ${label(h)}\n`+(top.d>3000?`התחנה הקרובה רחוקה מהמקום (${fmtM(top.d)})`:`${walk(top.d)} דק׳ הליכה · ${fmtM(top.d)}`));
